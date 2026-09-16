@@ -1,0 +1,39 @@
+name: Deploy to Cloud Server
+
+# 1. 触发时机：当 main 分支收到 push 时触发
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # 2. 运行环境：GitHub 免费提供的 Ubuntu 虚拟机
+    runs-on: ubuntu-latest
+
+    steps:
+      # 3. 步骤一：拉取当前仓库的代码到虚拟机里
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 4. 步骤二：配置 SSH 密钥并用 rsync 同步到你的云服务器
+      - name: Deploy via SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_KEY: ${{ secrets.SERVER_KEY }}
+        run: |
+          # 创建 ssh 目录
+          mkdir -p ~/.ssh
+          
+          # 将保存在 GitHub Secrets 里的私钥写入临时文件，并赋予严格权限 (600)
+          echo "$SERVER_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          
+          # 将目标服务器加到信任列表，防止 SSH 首次连接弹出确认提示导致脚本卡死
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+          
+          # 使用 Linux 原生 rsync 命令，把 index.html 增量同步到服务器的 Nginx 目录
+          rsync -avz ./index.html $SERVER_USER@$SERVER_HOST:/var/www/html/
+          
+          echo "🎉 部署完成！"
